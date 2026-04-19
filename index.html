@@ -143,6 +143,15 @@
             border-bottom-right-radius: 8px;
         }
 
+        .translation-subtext {
+            font-size: 11px;
+            color: #b0c4de;
+            margin-top: 6px;
+            font-style: italic;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 4px;
+        }
+
         .image-container {
             margin-top: 12px;
             border-radius: 24px;
@@ -426,6 +435,7 @@
             <h1>Burimagen</h1>
             <p><span class="online-badge"></span> AI генератор · всегда на связи</p>
         </div>
+        <button id="galleryBtn" style="margin-left: auto; padding: 8px 12px; background: rgba(255,255,255,0.2); border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 5px;">🏛️ Галерея</button>
     </div>
 
     <div class="chat-messages" id="chatMessages">
@@ -559,14 +569,11 @@
                 return { isValid: false, reason: 'greeting' };
             }
             
-            // Если в очищенной строке есть ключевые слова генерации, считаем валидным
-            if (!isImageRelated(stripped)) {
-                return { isValid: false, reason: 'not_image' };
-            }
+            // Мы больше не требуем обязательных слов вроде "нарисуй", воспринимая весь текст как сюжет.
             
             // Финальный промпт — можно использовать очищенный, но для генерации лучше взять corrected без лишних слов
             let finalPrompt = corrected;
-            // убираем возможные "нарисуй" и т.п. из начала, чтобы API получил чистое описание
+            // убираем возможные "нарисуй" и т.п. из начала, чтобы API получил чистое описание, если они все же есть
             finalPrompt = finalPrompt.replace(/^(нарисуй|создай|сгенерируй|покажи|сделай)\s+/i, '');
             finalPrompt = finalPrompt.trim();
             
@@ -591,6 +598,14 @@
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             bubble.textContent = text;
+
+            if (extra && extra.translation) {
+                const translationDiv = document.createElement('div');
+                translationDiv.className = 'translation-subtext';
+                translationDiv.textContent = `📝 ${extra.translation}`;
+                bubble.appendChild(translationDiv);
+            }
+
             msgDiv.appendChild(bubble);
             
             if (extra) {
@@ -649,8 +664,8 @@
             return addMessage(text, 'bot', extra);
         }
 
-        function addUserMessage(text) {
-            return addMessage(text, 'user');
+        function addUserMessage(text, extra = null) {
+            return addMessage(text, 'user', extra);
         }
 
         let progressInterval = null;
@@ -702,6 +717,8 @@
         const DB_NAME = 'BurimagenDB';
         const DB_VERSION = 1;
         let db;
+
+        window.saveToHistory = saveToHistory;
 
         function initDB() {
             return new Promise((resolve, reject) => {
@@ -882,7 +899,7 @@
             userInput.value = '';
             
             // Отображаем сообщение пользователя
-            addUserMessage(rawText);
+            let userMsgNode = addUserMessage(rawText);
             
             // Обрабатываем промпт
             const processed = processPrompt(rawText);
@@ -907,11 +924,33 @@
             showTypingIndicator();
             
             const startTime = Date.now();
-            let imageUrl = null;
+            let genResult = null;
             let errorOccurred = false;
             
             try {
-                imageUrl = await generateImageViaPollinations(finalPrompt);
+                const model = document.getElementById('modelSelect').value;
+                const aspectRatio = document.getElementById('aspectRatioSelect').value.split('x');
+                const width = parseInt(aspectRatio[0], 10);
+                const height = parseInt(aspectRatio[1], 10);
+                // Also get style if needed, though not directly supported by current function signature
+                const style = document.getElementById('styleSelect').value;
+
+                let promptWithStyle = await translateAndEnrichPrompt(finalPrompt, style);
+
+                // Add the translated string to the user message
+                const userBubble = userMsgNode.querySelector('.bubble');
+                if (userBubble) {
+                    const translationDiv = document.createElement('div');
+                    translationDiv.className = 'translation-subtext';
+                    // We extract just the translated prompt logic here
+                    let translatedRaw = promptWithStyle;
+                    if (style === 'art') translatedRaw = translatedRaw.replace(', digital art, trending on artstation, vibrant colors', '');
+                    if (style === 'photo') translatedRaw = translatedRaw.replace(', highly detailed, 4k, professional photography, sharp focus', '');
+                    translationDiv.textContent = `📝 Перевод: ${translatedRaw.trim()}`;
+                    userBubble.appendChild(translationDiv);
+                }
+
+                genResult = await generateImageViaPollinations(promptWithStyle, model, width, height, null);
             } catch (e) {
                 errorOccurred = true;
                 console.warn('Pollinations error:', e);
@@ -921,17 +960,26 @@
             
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             
-            if (errorOccurred || !imageUrl) {
+            if (errorOccurred || !genResult) {
                 addBotMessage(`⚠️ Не удалось сгенерировать изображение. Попробуй чуть позже или измени описание.`, { isError: true });
                 updateStatus('❌ Ошибка генерации');
             } else {
                 // Успех: выводим изображение
                 const snippet = finalPrompt.length > 35 ? finalPrompt.slice(0,35)+'…' : finalPrompt;
                 addBotMessage(`✨ Готово! Вот твоё изображение по запросу: "${snippet}"`, {
-                    imageUrl: imageUrl,
+                    imageUrl: genResult.objectURL,
+                    blob: genResult.blob,
+                    seed: genResult.finalSeed,
+                    fullPrompt: finalPrompt,
                     promptSnippet: snippet,
                     alt: finalPrompt
                 });
+
+                // Сохраняем в историю
+                if (typeof window.saveToHistory === 'function') {
+                    window.saveToHistory(genResult.blob, finalPrompt, genResult.finalSeed, Date.now());
+                }
+
                 updateStatus(`✅ Создано за ${elapsed} сек · 4K качество`);
             }
             
