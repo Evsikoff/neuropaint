@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -294,10 +293,126 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #2c405b; border-radius: 20px; }
+
+        .controls-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .controls-bar select {
+            background: #2A3241;
+            color: #E2E8F0;
+            border: 1px solid #3B4252;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
+        }
+        .hints-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .hint-btn {
+            background: #232A38;
+            color: #94A3B8;
+            border: 1px solid #3B4252;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .hint-btn:hover {
+            background: #3B4252;
+            color: #fff;
+        }
+        .chat-action-btn {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            cursor: pointer;
+            margin-right: 8px;
+            margin-top: 8px;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+        .chat-action-btn:hover {
+            background: rgba(51, 65, 85, 0.9);
+        }
+        .gallery-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 1000;
+            padding: 20px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+        .gallery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+        .gallery-close {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 28px;
+            cursor: pointer;
+        }
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .gallery-item {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #1E293B;
+            aspect-ratio: 1;
+        }
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            cursor: pointer;
+        }
+        .gallery-item-info {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.7);
+            padding: 8px;
+            font-size: 12px;
+            color: #fff;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
     </style>
 </head>
 <body>
+
+<div id="galleryModal" class="gallery-modal">
+    <div class="gallery-header">
+        <h2>История генераций (до 20)</h2>
+        <button class="gallery-close" onclick="document.getElementById('galleryModal').style.display='none'">&times;</button>
+    </div>
+    <div id="galleryGrid" class="gallery-grid"></div>
+</div>
 <div class="chat-container">
+
     <div class="chat-header">
         <div class="logo-icon">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -320,6 +435,31 @@
                 👋 Привет! Я Burimagen — создаю изображения по тексту. Хочешь создать? Пиши свою задачу и через 60 секунд получишь результат!
             </div>
         </div>
+    </div>
+
+
+    <div class="controls-bar">
+        <select id="modelSelect">
+            <option value="turbo">Модель: Turbo</option>
+            <option value="flux">Модель: Flux</option>
+            <option value="flux-realism">Модель: Realism</option>
+        </select>
+        <select id="aspectRatioSelect">
+            <option value="1024x768">4:3 (Ландшафт)</option>
+            <option value="768x1024">3:4 (Портрет)</option>
+            <option value="1024x1024">1:1 (Квадрат)</option>
+            <option value="1920x1080">16:9 (Широкий)</option>
+        </select>
+        <select id="styleSelect">
+            <option value="art">Стиль: Арт</option>
+            <option value="photo">Стиль: Фото</option>
+            <option value="none">Стиль: Нет</option>
+        </select>
+    </div>
+    <div class="hints-bar">
+        <button class="hint-btn">пейзаж в стиле Миядзаки</button>
+        <button class="hint-btn">портрет космонавта</button>
+        <button class="hint-btn">логотип кофейни</button>
     </div>
 
     <div class="input-area">
@@ -468,7 +608,32 @@
                     caption.innerHTML = `<span>✨ ${extra.promptSnippet || ''}</span><span>🖼️ 4K · Burimagen</span>`;
                     imgContainer.appendChild(caption);
                     
+
+                    const actionBtns = document.createElement('div');
+                    actionBtns.style.marginTop = '10px';
+
+                    if (extra.blob) {
+                        const downloadBtn = document.createElement('a');
+                        downloadBtn.className = 'chat-action-btn';
+                        downloadBtn.innerHTML = '⬇️ Скачать';
+                        downloadBtn.href = URL.createObjectURL(extra.blob);
+                        downloadBtn.download = `burimagen_${extra.seed}.jpg`;
+                        downloadBtn.style.textDecoration = 'none';
+                        downloadBtn.style.display = 'inline-block';
+                        actionBtns.appendChild(downloadBtn);
+                    }
+
+                    if (extra.fullPrompt) {
+                        const variantBtn = document.createElement('button');
+                        variantBtn.className = 'chat-action-btn';
+                        variantBtn.innerHTML = '🔄 Ещё вариант';
+                        variantBtn.onclick = () => handleSend(extra.fullPrompt, null);
+                        actionBtns.appendChild(variantBtn);
+                    }
+
+                    imgContainer.appendChild(actionBtns);
                     bubble.appendChild(imgContainer);
+
                 }
                 if (extra.isError) {
                     bubble.classList.add('error-bubble');
@@ -488,23 +653,42 @@
             return addMessage(text, 'user');
         }
 
+        let progressInterval = null;
+
         function showTypingIndicator() {
             const msgDiv = document.createElement('div');
             msgDiv.className = 'message bot';
             msgDiv.id = 'typingIndicator';
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
+            bubble.id = 'typingBubble';
             bubble.style.padding = '14px 22px';
-            const typing = document.createElement('div');
-            typing.className = 'typing-indicator';
-            typing.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
-            bubble.appendChild(typing);
+            bubble.textContent = 'Инициализация модели...';
             msgDiv.appendChild(bubble);
             messagesContainer.appendChild(msgDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            const stages = [
+                "Подготовка холста...",
+                "Рисует первый слой...",
+                "Добавляет основные цвета...",
+                "Прорисовывает детали...",
+                "Настраивает освещение...",
+                "Финальные штрихи...",
+                "Почти готово..."
+            ];
+
+            let stageIdx = 0;
+            progressInterval = setInterval(() => {
+                if (stageIdx < stages.length) {
+                    bubble.textContent = stages[stageIdx];
+                    stageIdx++;
+                }
+            }, 3000);
         }
 
         function removeTypingIndicator() {
+            if (progressInterval) clearInterval(progressInterval);
             const ind = document.getElementById('typingIndicator');
             if (ind) ind.remove();
         }
@@ -513,12 +697,161 @@
             statusLine.textContent = text;
         }
 
+
+        // ---------- HISTORY / INDEXED DB ----------
+        const DB_NAME = 'BurimagenDB';
+        const DB_VERSION = 1;
+        let db;
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => { db = request.result; resolve(); };
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('history')) {
+                        const store = db.createObjectStore('history', { keyPath: 'id', autoIncrement: true });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                };
+            });
+        }
+
+        async function saveToHistory(blob, prompt, seed, timestamp) {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('history', 'readwrite');
+                const store = tx.objectStore('history');
+
+                // Keep only last 20
+                const countReq = store.count();
+                countReq.onsuccess = () => {
+                    if (countReq.result >= 20) {
+                        const cursorReq = store.index('timestamp').openCursor();
+                        cursorReq.onsuccess = (e) => {
+                            const cursor = e.target.result;
+                            if (cursor) {
+                                store.delete(cursor.primaryKey);
+                            }
+                        };
+                    }
+                    store.add({ blob, prompt, seed, timestamp });
+                    resolve();
+                };
+            });
+        }
+
+        async function loadHistory() {
+            if (!db) await initDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('history', 'readonly');
+                const store = tx.objectStore('history');
+                const req = store.index('timestamp').getAll();
+                req.onsuccess = () => resolve(req.result.reverse());
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        document.getElementById('galleryBtn').addEventListener('click', async () => {
+            const modal = document.getElementById('galleryModal');
+            const grid = document.getElementById('galleryGrid');
+            grid.innerHTML = 'Загрузка...';
+            modal.style.display = 'block';
+
+            try {
+                const items = await loadHistory();
+                grid.innerHTML = '';
+                if (items.length === 0) {
+                    grid.innerHTML = '<p style="color: #94A3B8;">История пуста</p>';
+                    return;
+                }
+
+                items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'gallery-item';
+                    const url = URL.createObjectURL(item.blob);
+
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.onclick = () => {
+                        document.getElementById('galleryModal').style.display = 'none';
+                        document.getElementById('userInput').value = item.prompt;
+                    };
+
+                    const info = document.createElement('div');
+                    info.className = 'gallery-item-info';
+                    info.textContent = item.prompt;
+
+                    div.appendChild(img);
+                    div.appendChild(info);
+                    grid.appendChild(div);
+                });
+            } catch (e) {
+                grid.innerHTML = 'Ошибка загрузки истории';
+                console.error(e);
+            }
+        });
+
+        // ---------- TRANSLATION ----------
+        async function translateAndEnrichPrompt(text, style) {
+            try {
+                // translate
+                const res = await fetch(`https://text.pollinations.ai/prompt/translate%20to%20english:%20${encodeURIComponent(text)}`);
+                let translated = await res.text();
+
+                // Cleanup text response from API (sometimes returns markdown blocks or warnings)
+                translated = translated.replace(/```[a-z]*\n?/g, '').replace(/```/g, '').trim();
+                if (translated.includes('IMPORTANT NOTICE')) {
+                     // The API returned a notice, strip it
+                     const lines = translated.split('\n');
+                     translated = lines[lines.length - 1].trim();
+                     if (!translated) translated = "Landscape"; // fallback
+                }
+
+                // enrich
+                let enrichStr = "";
+                if (style === 'photo') {
+                    enrichStr = ", highly detailed, 4k, professional photography, sharp focus";
+                } else if (style === 'art') {
+                    enrichStr = ", digital art, trending on artstation, vibrant colors";
+                }
+                return translated + enrichStr;
+            } catch (e) {
+                console.warn('Translation failed, using original', e);
+                return text;
+            }
+        }
+
+        // ---------- RATE LIMITING ----------
+        let isOnCooldown = false;
+        function startCooldown() {
+            isOnCooldown = true;
+            sendBtn.disabled = true;
+            let left = 5;
+            const originalIcon = sendBtn.innerHTML;
+
+            const tick = () => {
+                if (left <= 0) {
+                    isOnCooldown = false;
+                    if (!isGenerating) sendBtn.disabled = false;
+                    sendBtn.innerHTML = originalIcon;
+                } else {
+                    sendBtn.innerHTML = `<span style="font-size:12px">${left}s</span>`;
+                    left--;
+                    setTimeout(tick, 1000);
+                }
+            };
+            tick();
+        }
+
         // ----------  ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЯ ЧЕРЕЗ POLLINATIONS (бесплатно, без ключа) ----------
-        async function generateImageViaPollinations(prompt) {
+        async function generateImageViaPollinations(prompt, model, width, height, seed) {
             // Pollinations AI — бесплатно, без API ключа
             const encodedPrompt = encodeURIComponent(prompt);
             // Используем модель 'flux' или 'turbo' — качественно и быстро
-            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&model=flux`;
+            const generatedSeed = seed || Math.floor(Math.random() * 1000000);
+            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&model=${model}&seed=${generatedSeed}`;
             
             // Загружаем через fetch, чтобы отследить статус
             const controller = new AbortController();
@@ -531,7 +864,7 @@
                 const blob = await response.blob();
                 if (blob.size === 0) throw new Error('Пустой ответ');
                 const objectURL = URL.createObjectURL(blob);
-                return objectURL;
+                return { objectURL, blob, finalSeed: generatedSeed, url: imageUrl };
             } catch (err) {
                 clearTimeout(timeoutId);
                 throw err;
@@ -614,7 +947,7 @@
         }
 
         // ----------  ИНИЦИАЛИЗАЦИЯ ----------
-        sendBtn.addEventListener('click', handleSend);
+        sendBtn.addEventListener('click', () => handleSend());
         userInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -623,6 +956,13 @@
         });
 
         // Дополнительно: можно вставить демо-пример по клику на подсказку (нет, не требуется)
+        document.querySelectorAll('.hint-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                userInput.value = btn.textContent;
+                handleSend();
+            });
+        });
+
         window.addEventListener('load', () => {
             userInput.focus();
         });
@@ -649,4 +989,3 @@
 </script>
 </body>
 </html>
-```
