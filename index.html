@@ -308,6 +308,7 @@
             gap: 10px;
             margin-bottom: 10px;
             flex-wrap: wrap;
+            justify-content: center;
         }
         .controls-bar select {
             background: #2A3241;
@@ -324,6 +325,7 @@
             gap: 8px;
             margin-bottom: 15px;
             flex-wrap: wrap;
+            justify-content: center;
         }
         .hint-btn {
             background: #232A38;
@@ -626,6 +628,10 @@
 
                     const actionBtns = document.createElement('div');
                     actionBtns.style.marginTop = '10px';
+                    actionBtns.style.display = 'flex';
+                    actionBtns.style.justifyContent = 'center';
+                    actionBtns.style.flexWrap = 'wrap';
+                    actionBtns.style.gap = '8px';
 
                     if (extra.blob) {
                         const downloadBtn = document.createElement('a');
@@ -642,7 +648,10 @@
                         const variantBtn = document.createElement('button');
                         variantBtn.className = 'chat-action-btn';
                         variantBtn.innerHTML = '🔄 Ещё вариант';
-                        variantBtn.onclick = () => handleSend(extra.fullPrompt, null);
+                        variantBtn.onclick = () => {
+                            userInput.value = extra.fullPrompt;
+                            handleSend();
+                        };
                         actionBtns.appendChild(variantBtn);
                     }
 
@@ -811,32 +820,49 @@
         });
 
         // ---------- TRANSLATION ----------
+        function isSuspiciousTranslation(s, originalText) {
+            if (!s) return true;
+            if (s.length < 1) return true;
+            // Response is a lot longer than the source — not a translation, likely a notice/HTML
+            if (s.length > Math.max(400, originalText.length * 6)) return true;
+            return /pollinations\.ai|IMPORTANT NOTICE|anonymous requests|rate ?limit|<html|<!doctype|^\s*note\s*:/i.test(s);
+        }
+
         async function translateAndEnrichPrompt(text, style) {
-            try {
-                // translate
-                const res = await fetch(`https://text.pollinations.ai/prompt/translate%20to%20english:%20${encodeURIComponent(text)}`);
-                let translated = await res.text();
-
-                // Cleanup text response from API (sometimes returns markdown blocks or warnings)
-                translated = translated.replace(/```[a-z]*\n?/g, '').replace(/```/g, '').trim();
-                if (translated.includes('IMPORTANT NOTICE')) {
-                     // The API returned a notice, strip it
-                     const lines = translated.split('\n');
-                     translated = lines[lines.length - 1].trim();
-                     if (!translated) translated = "Landscape"; // fallback
-                }
-
-                // enrich
+            const enrich = (t) => {
                 let enrichStr = "";
                 if (style === 'photo') {
                     enrichStr = ", highly detailed, 4k, professional photography, sharp focus";
                 } else if (style === 'art') {
                     enrichStr = ", digital art, trending on artstation, vibrant colors";
                 }
-                return translated + enrichStr;
+                return t + enrichStr;
+            };
+
+            try {
+                const res = await fetch(`https://text.pollinations.ai/prompt/translate%20to%20english:%20${encodeURIComponent(text)}`);
+                if (!res.ok) {
+                    console.warn('Translation API returned', res.status, '— using original text');
+                    return enrich(text);
+                }
+                let translated = (await res.text() || '').replace(/```[a-z]*\n?/g, '').replace(/```/g, '').trim();
+
+                if (isSuspiciousTranslation(translated, text)) {
+                    // Try to salvage the last clean line
+                    const lines = translated.split('\n').map(l => l.trim()).filter(Boolean);
+                    const last = lines[lines.length - 1] || '';
+                    if (last && !isSuspiciousTranslation(last, text)) {
+                        translated = last;
+                    } else {
+                        console.warn('Translation looks like a service notice, using original text');
+                        translated = text;
+                    }
+                }
+
+                return enrich(translated);
             } catch (e) {
                 console.warn('Translation failed, using original', e);
-                return text;
+                return enrich(text);
             }
         }
 
