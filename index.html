@@ -143,6 +143,15 @@
             border-bottom-right-radius: 8px;
         }
 
+        .translation-subtext {
+            font-size: 11px;
+            color: #b0c4de;
+            margin-top: 6px;
+            font-style: italic;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 4px;
+        }
+
         .image-container {
             margin-top: 12px;
             border-radius: 24px;
@@ -592,6 +601,14 @@
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             bubble.textContent = text;
+
+            if (extra && extra.translation) {
+                const translationDiv = document.createElement('div');
+                translationDiv.className = 'translation-subtext';
+                translationDiv.textContent = `📝 ${extra.translation}`;
+                bubble.appendChild(translationDiv);
+            }
+
             msgDiv.appendChild(bubble);
             
             if (extra) {
@@ -650,8 +667,8 @@
             return addMessage(text, 'bot', extra);
         }
 
-        function addUserMessage(text) {
-            return addMessage(text, 'user');
+        function addUserMessage(text, extra = null) {
+            return addMessage(text, 'user', extra);
         }
 
         let progressInterval = null;
@@ -885,7 +902,7 @@
             userInput.value = '';
             
             // Отображаем сообщение пользователя
-            addUserMessage(rawText);
+            let userMsgNode = addUserMessage(rawText);
             
             // Обрабатываем промпт
             const processed = processPrompt(rawText);
@@ -920,9 +937,21 @@
                 const height = parseInt(aspectRatio[1], 10);
                 // Also get style if needed, though not directly supported by current function signature
                 const style = document.getElementById('styleSelect').value;
-                let promptWithStyle = finalPrompt;
-                if (style === 'art') promptWithStyle += ', digital art, highly detailed, illustration';
-                if (style === 'photo') promptWithStyle += ', highly realistic photography, 8k resolution, photorealistic';
+
+                let promptWithStyle = await translateAndEnrichPrompt(finalPrompt, style);
+
+                // Add the translated string to the user message
+                const userBubble = userMsgNode.querySelector('.bubble');
+                if (userBubble) {
+                    const translationDiv = document.createElement('div');
+                    translationDiv.className = 'translation-subtext';
+                    // We extract just the translated prompt logic here
+                    let translatedRaw = promptWithStyle;
+                    if (style === 'art') translatedRaw = translatedRaw.replace(', digital art, trending on artstation, vibrant colors', '');
+                    if (style === 'photo') translatedRaw = translatedRaw.replace(', highly detailed, 4k, professional photography, sharp focus', '');
+                    translationDiv.textContent = `📝 Перевод: ${translatedRaw.trim()}`;
+                    userBubble.appendChild(translationDiv);
+                }
 
                 genResult = await generateImageViaPollinations(promptWithStyle, model, width, height, null);
             } catch (e) {
