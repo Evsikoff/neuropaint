@@ -908,11 +908,21 @@
             showTypingIndicator();
             
             const startTime = Date.now();
-            let imageUrl = null;
+            let genResult = null;
             let errorOccurred = false;
             
             try {
-                imageUrl = await generateImageViaPollinations(finalPrompt);
+                const model = document.getElementById('modelSelect').value;
+                const aspectRatio = document.getElementById('aspectRatioSelect').value.split('x');
+                const width = parseInt(aspectRatio[0], 10);
+                const height = parseInt(aspectRatio[1], 10);
+                // Also get style if needed, though not directly supported by current function signature
+                const style = document.getElementById('styleSelect').value;
+                let promptWithStyle = finalPrompt;
+                if (style === 'art') promptWithStyle += ', digital art, highly detailed, illustration';
+                if (style === 'photo') promptWithStyle += ', highly realistic photography, 8k resolution, photorealistic';
+
+                genResult = await generateImageViaPollinations(promptWithStyle, model, width, height, null);
             } catch (e) {
                 errorOccurred = true;
                 console.warn('Pollinations error:', e);
@@ -922,17 +932,31 @@
             
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             
-            if (errorOccurred || !imageUrl) {
+            if (errorOccurred || !genResult) {
                 addBotMessage(`⚠️ Не удалось сгенерировать изображение. Попробуй чуть позже или измени описание.`, { isError: true });
                 updateStatus('❌ Ошибка генерации');
             } else {
                 // Успех: выводим изображение
                 const snippet = finalPrompt.length > 35 ? finalPrompt.slice(0,35)+'…' : finalPrompt;
                 addBotMessage(`✨ Готово! Вот твоё изображение по запросу: "${snippet}"`, {
-                    imageUrl: imageUrl,
+                    imageUrl: genResult.objectURL,
+                    blob: genResult.blob,
+                    seed: genResult.finalSeed,
+                    fullPrompt: finalPrompt,
                     promptSnippet: snippet,
                     alt: finalPrompt
                 });
+
+                // Сохраняем в историю
+                if (typeof window.saveToHistory === 'function') {
+                    window.saveToHistory({
+                        prompt: finalPrompt,
+                        imageUrl: genResult.objectURL, // For history it's better to save base64 or blob later, but keeping simple
+                        blob: genResult.blob,
+                        seed: genResult.finalSeed
+                    });
+                }
+
                 updateStatus(`✅ Создано за ${elapsed} сек · 4K качество`);
             }
             
